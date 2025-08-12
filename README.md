@@ -60,7 +60,6 @@ jobs:
 | Output | Description |
 |--------|-------------|
 | `findings-count` | Total number of security findings |
-| `new-findings-count` | Number of new findings (for PRs) |
 | `results-file` | Path to the results JSON file |
 
 ## How It Works
