@@ -195,7 +195,7 @@ runs:
           echo "Example usage:"
           echo "  - uses: anthropics/claude-code-security-reviewer@main"
           echo "    with:"
-          echo "      claude-api-key: \${{ secrets.ANTHROPIC_API_KEY }}"
+          echo "      claude-api-key: \$\{{ secrets.ANTHROPIC_API_KEY }}"
           exit 1
         fi
                 
