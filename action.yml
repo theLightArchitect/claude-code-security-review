@@ -86,6 +86,9 @@ runs:
     - name: Determine ClaudeCode enablement
       id: claudecode-check
       shell: bash
+      env:
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        RUN_EVERY_COMMIT: ${{ inputs.run-every-commit }}
       run: |
         # Check if ClaudeCode should be enabled
         ENABLE_CLAUDECODE="true"
@@ -93,15 +96,15 @@ runs:
         
         # For PRs, check sampling and cache
         if [ "${{ github.event_name }}" == "pull_request" ]; then
-          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_NUMBER="$PR_NUMBER"
           CACHE_HIT="${{ steps.claudecode-history.outputs.cache-hit }}"
 
           # Now check cache - if ClaudeCode has already run, disable unless run-every-commit is true
           # Check if marker file exists (cache may have been restored from a different SHA)
-          if [ "${{ inputs.run-every-commit }}" != "true" ] && [ -f ".claudecode-marker/marker.json" ]; then
+          if [ "$RUN_EVERY_COMMIT" != "true" ] && [ -f ".claudecode-marker/marker.json" ]; then
             echo "ClaudeCode has already run on PR #$PR_NUMBER (found marker file), forcing disable to avoid false positives"
             ENABLE_CLAUDECODE="false"
-          elif [ "${{ inputs.run-every-commit }}" == "true" ] && [ -f ".claudecode-marker/marker.json" ]; then
+          elif [ "$RUN_EVERY_COMMIT" == "true" ] && [ -f ".claudecode-marker/marker.json" ]; then
             echo "ClaudeCode has already run on PR #$PR_NUMBER but run-every-commit is enabled, running again"
           elif [ "$ENABLE_CLAUDECODE" == "true" ]; then
             echo "ClaudeCode will run for PR #$PR_NUMBER (first run)"
@@ -120,22 +123,29 @@ runs:
     - name: Reserve ClaudeCode slot to prevent race conditions
       if: steps.claudecode-check.outputs.enable_claudecode == 'true' && github.event_name == 'pull_request'
       shell: bash
+      env:
+        REPOSITORY_ID: ${{ github.repository_id }}
+        REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        SHA: ${{ github.sha }}
+        RUN_ID: ${{ github.run_id }}
+        RUN_NUMBER: ${{ github.run_number }}
       run: |
         # Create a reservation marker immediately to prevent other concurrent runs
         mkdir -p .claudecode-marker
         cat > .claudecode-marker/marker.json << EOF
         {
           "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-          "repository_id": "${{ github.repository_id }}",
-          "repository": "${{ github.repository }}",
-          "pr_number": ${{ github.event.pull_request.number }},
-          "sha": "${{ github.sha }}",
+          "repository_id": "$REPOSITORY_ID",
+          "repository": "$REPOSITORY",
+          "pr_number": $PR_NUMBER,
+          "sha": "$SHA",
           "status": "reserved",
-          "run_id": "${{ github.run_id }}",
-          "run_number": "${{ github.run_number }}"
+          "run_id": "$RUN_ID",
+          "run_number": "$RUN_NUMBER"
         }
         EOF
-        echo "Created ClaudeCode reservation marker for PR #${{ github.event.pull_request.number }}"
+        echo "Created ClaudeCode reservation marker for PR #$PR_NUMBER"
     
     - name: Save ClaudeCode reservation to cache
       if: steps.claudecode-check.outputs.enable_claudecode == 'true' && github.event_name == 'pull_request'
@@ -152,10 +162,12 @@ runs:
     
     - name: Install dependencies
       shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
       run: |
         echo "::group::Install Deps"
         if [ "${{ steps.claudecode-check.outputs.enable_claudecode }}" == "true" ]; then
-          pip install -r ${{ github.action_path }}/claudecode/requirements.txt
+          pip install -r "$ACTION_PATH/claudecode/requirements.txt"
           npm install -g @anthropic-ai/claude-code
         fi
         sudo apt-get update && sudo apt-get install -y jq
@@ -175,6 +187,8 @@ runs:
         FALSE_POSITIVE_FILTERING_INSTRUCTIONS: ${{ inputs.false-positive-filtering-instructions }}
         CUSTOM_SECURITY_SCAN_INSTRUCTIONS: ${{ inputs.custom-security-scan-instructions }}
         CLAUDE_MODEL: ${{ inputs.claude-model }}
+        CLAUDECODE_TIMEOUT: ${{ inputs.claudecode-timeout }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
         echo "Running ClaudeCode AI security analysis..."
         echo "----------------------------------------"
@@ -200,11 +214,11 @@ runs:
         fi
                 
         # Set timeout
-        export CLAUDE_TIMEOUT="${{ inputs.claudecode-timeout }}"
+        export CLAUDE_TIMEOUT="$CLAUDECODE_TIMEOUT"
         
         # Run ClaudeCode audit with verbose debugging
         export REPO_PATH=$(pwd)
-        cd ${{ github.action_path }}
+        cd "$ACTION_PATH"
         
         # Enable verbose debugging
         echo "::group::ClaudeCode Environment"
@@ -310,8 +324,9 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
         CLAUDECODE_FINDINGS: ${{ steps.claudecode-scan.outputs.findings_count }}
         SILENCE_CLAUDECODE_COMMENTS: ${{ steps.claudecode-check.outputs.silence_claudecode_comments }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
-        node ${{ github.action_path }}/scripts/comment-pr-findings.js
+        node "$ACTION_PATH/scripts/comment-pr-findings.js"
 
 branding:
   icon: 'shield'
