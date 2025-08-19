@@ -29,7 +29,7 @@ inputs:
     default: ''
 
   claude-model:
-    description: 'Claude model to use for security analysis (e.g., claude-3-sonnet-20240229)'
+    description: 'Claude model to use for security analysis (e.g., claude-sonnet-4-20250514)'
     required: false
     default: ''
 
@@ -201,6 +201,16 @@ runs:
         if [ "${{ github.event_name }}" != "pull_request" ]; then
           echo "ClaudeCode only runs on pull requests, skipping"
           exit 0
+        fi
+        
+        # Validate API key is provided
+        if [ -z "$ANTHROPIC_API_KEY" ]; then
+          echo "::error::ANTHROPIC_API_KEY is not set. Please provide the claude-api-key input to the action."
+          echo "Example usage:"
+          echo "  - uses: anthropics/claude-code-security-reviewer@main"
+          echo "    with:"
+          echo "      claude-api-key: \$\{{ secrets.ANTHROPIC_API_KEY }}"
+          exit 1
         fi
                 
         # Set timeout
